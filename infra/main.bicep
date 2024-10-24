@@ -1,4 +1,4 @@
-targetScope = 'subscription'
+targetScope = 'resourceGroup'
 
 @minLength(1)
 @maxLength(64)
@@ -15,7 +15,7 @@ param environmentName string
 param location string
 
 @description('The name of the resource group for the OpenAI resource')
-param openAiResourceGroupName string = ''
+param openAiResourceGroupName string = 'resourceGroup().name'
 
 @description('Location for the OpenAI resource')
 @allowed([
@@ -99,18 +99,8 @@ param runningOnGh string = ''
 @description('Whether the deployment is running on Azure DevOps Pipeline')
 param runningOnAdo string = ''
 
-var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
+var resourceToken = toLower(uniqueString(resourceGroup().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
-
-resource resourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' = {
-  name: 'rg-${environmentName}'
-  location: location
-  tags: tags
-}
-
-resource openAiResourceGroup 'Microsoft.Resources/resourceGroups@2021-04-01' existing = if (!empty(openAiResourceGroupName)) {
-  name: !empty(openAiResourceGroupName) ? openAiResourceGroupName : resourceGroup.name
-}
 
 var prefix = toLower('${environmentName}-${resourceToken}')
 
@@ -118,7 +108,7 @@ var prefix = toLower('${environmentName}-${resourceToken}')
 var principalType = empty(runningOnGh) && empty(runningOnAdo) ? 'User' : 'ServicePrincipal'
 module managedIdentity 'core/security/managed-identity.bicep' = {
   name: 'managed-identity'
-  scope: resourceGroup
+  scope: resourceGroup()
   params: {
     name: 'id-${resourceToken}'
     location: location
@@ -128,7 +118,7 @@ module managedIdentity 'core/security/managed-identity.bicep' = {
 
 module ai 'core/host/ai-environment.bicep' = {
   name: 'ai'
-  scope: resourceGroup
+  scope: resourceGroup()
   params: {
     location: location
     tags: tags
@@ -160,7 +150,7 @@ module ai 'core/host/ai-environment.bicep' = {
 
 module cosmos 'core/database/cosmos/sql/cosmos-sql-db.bicep' = {
   name: 'cosmos'
-  scope: resourceGroup
+  scope: resourceGroup()
   params: {
     accountName: !empty(cosmosAccountName) ? cosmosAccountName : 'cosmos-contoso-${resourceToken}'
     databaseName: 'contoso-outdoor'
@@ -182,7 +172,7 @@ module cosmos 'core/database/cosmos/sql/cosmos-sql-db.bicep' = {
 // Container apps host (including container registry)
 module containerApps 'core/host/container-apps.bicep' = {
   name: 'container-apps'
-  scope: resourceGroup
+  scope: resourceGroup()
   params: {
     name: 'app'
     location: location
@@ -195,7 +185,7 @@ module containerApps 'core/host/container-apps.bicep' = {
 
 module aca 'app/aca.bicep' = {
   name: 'aca'
-  scope: resourceGroup
+  scope: resourceGroup()
   params: {
     name: replace('${take(prefix, 19)}-ca', '--', '-')
     location: location
@@ -219,7 +209,7 @@ module aca 'app/aca.bicep' = {
 }
 
 module aiSearchRole 'core/security/role.bicep' = {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'ai-search-index-data-contributor'
   params: {
     principalId: managedIdentity.outputs.managedIdentityPrincipalId
@@ -229,7 +219,7 @@ module aiSearchRole 'core/security/role.bicep' = {
 }
 
 module cosmosRoleContributor 'core/security/role.bicep' = {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'ai-search-service-contributor'
   params: {
     principalId: managedIdentity.outputs.managedIdentityPrincipalId
@@ -239,7 +229,7 @@ module cosmosRoleContributor 'core/security/role.bicep' = {
 }
 
 module cosmosAccountRole 'core/security/role-cosmos.bicep' = {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'cosmos-account-role'
   params: {
     principalId: managedIdentity.outputs.managedIdentityPrincipalId
@@ -249,7 +239,7 @@ module cosmosAccountRole 'core/security/role-cosmos.bicep' = {
 }
 
 module appinsightsAccountRole 'core/security/role.bicep' = {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'appinsights-account-role'
   params: {
     principalId: managedIdentity.outputs.managedIdentityPrincipalId
@@ -259,7 +249,7 @@ module appinsightsAccountRole 'core/security/role.bicep' = {
 }
 
 module userAiSearchRole 'core/security/role.bicep' = if (!empty(principalId)) {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'user-ai-search-index-data-contributor'
   params: {
     principalId: principalId
@@ -269,7 +259,7 @@ module userAiSearchRole 'core/security/role.bicep' = if (!empty(principalId)) {
 }
 
 module userCosmosRoleContributor 'core/security/role.bicep' = if (!empty(principalId)) {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'user-ai-search-service-contributor'
   params: {
     principalId: principalId
@@ -279,7 +269,7 @@ module userCosmosRoleContributor 'core/security/role.bicep' = if (!empty(princip
 }
 
 module openaiRoleUser 'core/security/role.bicep' = if (!empty(principalId)) {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'user-openai-user'
   params: {
     principalId: principalId
@@ -289,7 +279,7 @@ module openaiRoleUser 'core/security/role.bicep' = if (!empty(principalId)) {
 }
 
 module userCosmosAccountRole 'core/security/role-cosmos.bicep' = if (!empty(principalId)) {
-  scope: resourceGroup
+  scope: resourceGroup()
   name: 'user-cosmos-account-role'
   params: {
     principalId: principalId
@@ -299,14 +289,14 @@ module userCosmosAccountRole 'core/security/role-cosmos.bicep' = if (!empty(prin
 }
 
 output AZURE_LOCATION string = location
-output AZURE_RESOURCE_GROUP string = resourceGroup.name
+output AZURE_RESOURCE_GROUP string = resourceGroup().name
 
 output AZURE_OPENAI_CHAT_DEPLOYMENT string = openAiDeploymentName
 output AZURE_OPENAI_API_VERSION string = openAiApiVersion
 output AZURE_OPENAI_ENDPOINT string = ai.outputs.openAiEndpoint
 output AZURE_OPENAI_NAME string = ai.outputs.openAiName
-output AZURE_OPENAI_RESOURCE_GROUP string = openAiResourceGroup.name
-output AZURE_OPENAI_RESOURCE_GROUP_LOCATION string = openAiResourceGroup.location
+output AZURE_OPENAI_RESOURCE_GROUP string = resourceGroup().name
+output AZURE_OPENAI_RESOURCE_GROUP_LOCATION string = resourceGroup().location
 
 output SERVICE_ACA_NAME string = aca.outputs.SERVICE_ACA_NAME
 output SERVICE_ACA_URI string = aca.outputs.SERVICE_ACA_URI
